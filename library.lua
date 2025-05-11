@@ -55,7 +55,7 @@ local Library = {
     Toggles = Toggles,
     Options = Options,
 
-    NotifySide = "False",
+    NotifySide = "Right",
     ShowCustomCursor = true,
     ForceCheckbox = false,
     ShowToggleFrameInKeybinds = true,
@@ -72,12 +72,12 @@ local Library = {
 
     IsLightTheme = false,
     Scheme = {
-        BackgroundColor = Color3.fromRGB(15, 15, 15),
+        BackgroundColor = Color3.fromRGB(18, 18, 20),
         MainColor = Color3.fromRGB(25, 25, 25),
-        AccentColor = Color3.fromRGB(0, 153, 255),
-        OutlineColor = Color3.fromRGB(40, 40, 40),
-        FontColor = Color3.new(1, 1, 1),
-        Font = Font.fromEnum(Enum.Font.Code),
+        AccentColor = Color3.fromRGB(200, 130, 200),
+        OutlineColor = Color3.fromRGB(45, 45, 48),
+        FontColor = Color3.new(233, 233, 233),
+        Font = Font.fromEnum(Enum.Font.Gotham),
 
         Red = Color3.fromRGB(255, 50, 50),
         Dark = Color3.new(0, 0, 0),
@@ -3783,6 +3783,14 @@ function Library:Notify(...)
         Data.SoundId = select(3, ...)
     end
 
+    local DeletedTime = false
+    if typeof(Data.Time) == "Instance" then
+        local Con; Con = Data.Time.Destroying:Connect(function()
+            DeletedTime = true;
+            Con:Disconnect();
+        end)
+    end
+
     local FakeBackground = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -3847,6 +3855,7 @@ function Library:Notify(...)
             },
         })
     end
+
     if Data.Description then
         Desc = New("TextLabel", {
             BackgroundTransparency = 1,
@@ -3954,7 +3963,7 @@ function Library:Notify(...)
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if typeof(Data.Time) == "Instance" then
-            Data.Time.Destroying:Wait()
+            repeat task.wait() until DeletedTime == true
         else
             TweenService
                 :Create(TimerFill, TweenInfo.new(Data.Time, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut), {
