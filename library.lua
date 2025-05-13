@@ -15,11 +15,11 @@ local getgenv = getgenv or function()
 end
 local setclipboard = setclipboard or nil
 local protectgui = protectgui or (syn and syn.protect_gui) or function() end
-local gethui = gethui or function() 
-    return CoreGui 
+local gethui = gethui or function()
+    return CoreGui
 end
 
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local Mouse = LocalPlayer:GetMouse()
 
 local Labels = {}
@@ -31,6 +31,7 @@ local Library = {
     LocalPlayer = LocalPlayer,
     DevicePlatform = nil,
     IsMobile = false,
+    IsRobloxFocused = true,
 
     ScreenGui = nil,
 
@@ -76,7 +77,7 @@ local Library = {
         MainColor = Color3.fromRGB(25, 25, 25),
         AccentColor = Color3.fromRGB(200, 130, 200),
         OutlineColor = Color3.fromRGB(45, 45, 48),
-        FontColor = Color3.new(233, 233, 233),
+        FontColor = Color3.new(1, 1, 1),
         Font = Font.fromEnum(Enum.Font.Gotham),
 
         Red = Color3.fromRGB(255, 50, 50),
@@ -88,7 +89,7 @@ local Library = {
     DPIRegistry = {},
 }
 
-if RunService:IsStudio() then 
+if RunService:IsStudio() then
     if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
         Library.IsMobile = true
         Library.MinSize = Vector2.new(480, 240)
@@ -278,6 +279,7 @@ end
 local function ApplyTextScale(TextSize)
     return TextSize * Library.DPIScale
 end
+
 local function WaitForEvent(Event, Timeout, Condition)
     local Bindable = Instance.new("BindableEvent")
     local Connection = Event:Once(function(...)
@@ -291,19 +293,28 @@ local function WaitForEvent(Event, Timeout, Condition)
         Connection:Disconnect()
         Bindable:Fire(false)
     end)
-    return Bindable.Event:Wait()
+
+    local Result = Bindable.Event:Wait()
+    Bindable:Destroy()
+
+    return Result
+end
+
+local function IsMouseInput(Input: InputObject, IncludeM2: boolean?)
+    return Input.UserInputType == Enum.UserInputType.MouseButton1
+        or IncludeM2 and Input.UserInputType == Enum.UserInputType.MouseButton2
+        or Input.UserInputType == Enum.UserInputType.Touch
 end
 local function IsClickInput(Input: InputObject, IncludeM2: boolean?)
-    return (
-        Input.UserInputType == Enum.UserInputType.MouseButton1
-            or IncludeM2 and Input.UserInputType == Enum.UserInputType.MouseButton2
-            or Input.UserInputType == Enum.UserInputType.Touch
-    ) and Input.UserInputState == Enum.UserInputState.Begin
+    return IsMouseInput(Input, IncludeM2)
+        and Input.UserInputState == Enum.UserInputState.Begin
+        and Library.IsRobloxFocused
 end
 local function IsHoverInput(Input: InputObject)
     return (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch)
         and Input.UserInputState == Enum.UserInputState.Change
 end
+
 local function GetTableSize(Table: { [any]: any })
     local Size = 0
 
@@ -322,6 +333,15 @@ local function StopTween(Tween: TweenBase)
 end
 local function Trim(Text: string)
     return Text:match("^%s*(.-)%s*$")
+end
+local function Round(Value, Rounding)
+    assert(Rounding >= 0, "Invalid rounding number.")
+
+    if Rounding == 0 then
+        return math.floor(Value)
+    end
+
+    return tonumber(string.format("%." .. Rounding .. "f", Value))
 end
 
 local function GetPlayers(ExcludeLocalPlayer: boolean?)
@@ -545,20 +565,22 @@ end
 
 --// Main Instances \\-
 local function SafeParentUI(Instance: Instance, Parent: Instance | () -> Instance)
-    if not pcall(function()
-        if not Parent then
-            Parent = CoreGui
-        end
-        
-        local DestinationParent
-        if typeof(Parent) == "function" then
-            DestinationParent = Parent()
-        else
-            DestinationParent = Parent
-        end
+    if
+        not pcall(function()
+            if not Parent then
+                Parent = CoreGui
+            end
 
-        Instance.Parent = DestinationParent
-    end) then
+            local DestinationParent
+            if typeof(Parent) == "function" then
+                DestinationParent = Parent()
+            else
+                DestinationParent = Parent
+            end
+
+            Instance.Parent = DestinationParent
+        end)
+    then
         Instance.Parent = Library.LocalPlayer:WaitForChild("PlayerGui", math.huge)
     end
 end
@@ -1131,7 +1153,7 @@ Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input: InputObje
             CurrentMenu
             and not (
                 Library:MouseIsOverFrame(CurrentMenu.Menu, Location)
-                    or Library:MouseIsOverFrame(CurrentMenu.Holder, Location)
+                or Library:MouseIsOverFrame(CurrentMenu.Holder, Location)
             )
         then
             CurrentMenu:Close()
@@ -1441,8 +1463,8 @@ do
         end
 
         function KeyPicker:Display()
-            if Library.Unloaded then 
-                return 
+            if Library.Unloaded then
+                return
             end
 
             local X, Y =
@@ -1875,8 +1897,8 @@ do
         end
 
         function ColorPicker:Display()
-            if Library.Unloaded then 
-                return 
+            if Library.Unloaded then
+                return
             end
 
             ColorPicker.Value = Color3.fromHSV(ColorPicker.Hue, ColorPicker.Sat, ColorPicker.Vib)
@@ -1932,8 +1954,8 @@ do
         Holder.MouseButton1Click:Connect(ColorMenu.Toggle)
         Holder.MouseButton2Click:Connect(ContextMenu.Toggle)
 
-        SatVipMap.MouseButton1Down:Connect(function()
-            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1 or Enum.UserInputType.Touch) do
+        SatVipMap.InputBegan:Connect(function(Input: InputObject)
+            while IsClickInput(Input) do
                 local MinX = SatVipMap.AbsolutePosition.X
                 local MaxX = MinX + SatVipMap.AbsoluteSize.X
                 local LocationX = math.clamp(Mouse.X, MinX, MaxX)
@@ -1954,8 +1976,8 @@ do
                 RunService.RenderStepped:Wait()
             end
         end)
-        HueSelector.MouseButton1Down:Connect(function()
-            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1 or Enum.UserInputType.Touch) do
+        HueSelector.InputBegan:Connect(function(Input: InputObject)
+            while IsClickInput(Input) do
                 local Min = HueSelector.AbsolutePosition.Y
                 local Max = Min + HueSelector.AbsoluteSize.Y
                 local Location = math.clamp(Mouse.Y, Min, Max)
@@ -1971,10 +1993,8 @@ do
             end
         end)
         if TransparencySelector then
-            TransparencySelector.MouseButton1Down:Connect(function()
-                while
-                    UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1 or Enum.UserInputType.Touch)
-                do
+            TransparencySelector.InputBegan:Connect(function(Input: InputObject)
+                while IsClickInput(Input) do
                     local Min = TransparencySelector.AbsolutePosition.Y
                     local Max = TransparencySelector.AbsolutePosition.Y + TransparencySelector.AbsoluteSize.Y
                     local Location = math.clamp(Mouse.Y, Min, Max)
@@ -2344,7 +2364,7 @@ do
             InitEvents(SubButton)
 
             function SubButton:UpdateColors()
-                if Library.Unloaded then 
+                if Library.Unloaded then
                     return
                 end
 
@@ -2405,7 +2425,7 @@ do
         end
 
         function Button:UpdateColors()
-            if Library.Unloaded then 
+            if Library.Unloaded then
                 return
             end
 
@@ -3047,6 +3067,7 @@ do
         local Groupbox = self
         local Container = Groupbox.Container
 
+        local Dragging = false
         local Slider = {
             Text = Info.Text,
             Value = Info.Default,
@@ -3168,14 +3189,6 @@ do
             Slider.Changed = Func
         end
 
-        local function Round(Value)
-            if Info.Rounding == 0 then
-                return math.floor(Value)
-            end
-
-            return tonumber(string.format("%." .. Info.Rounding .. "f", Value))
-        end
-
         function Slider:SetMax(Value)
             assert(Value > Slider.Min, "Max value cannot be less than the current min value.")
 
@@ -3248,8 +3261,8 @@ do
             Slider:Display()
         end
 
-        Bar.MouseButton1Down:Connect(function()
-            if Slider.Disabled then
+        Bar.InputBegan:Connect(function(Input: InputObject)
+            if not IsClickInput(Input) or Slider.Disabled then
                 return
             end
 
@@ -3257,12 +3270,12 @@ do
                 Side.ScrollingEnabled = false
             end
 
-            while UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1 or Enum.UserInputType.Touch) do
+            while IsClickInput(Input) do
                 local Location = Mouse.X
                 local Scale = math.clamp((Location - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
 
                 local OldValue = Slider.Value
-                Slider.Value = Round(Slider.Min + ((Slider.Max - Slider.Min) * Scale))
+                Slider.Value = Round(Slider.Min + ((Slider.Max - Slider.Min) * Scale), Info.Rounding)
 
                 Slider:Display()
                 if Slider.Value ~= OldValue then
@@ -3785,9 +3798,10 @@ function Library:Notify(...)
 
     local DeletedTime = false
     if typeof(Data.Time) == "Instance" then
-        local Con; Con = Data.Time.Destroying:Connect(function()
-            DeletedTime = true;
-            Con:Disconnect();
+        local Con
+        Con = Data.Time.Destroying:Connect(function()
+            DeletedTime = true
+            Con:Disconnect()
         end)
     end
 
@@ -3941,7 +3955,7 @@ function Library:Notify(...)
         Size = UDim2.fromScale(1, 1),
         Parent = TimerBar,
     })
-    
+
     if typeof(Data.Time) == "Instance" then
         TimerFill.Size = UDim2.fromScale(0, 1)
     end
@@ -3955,7 +3969,7 @@ function Library:Notify(...)
     end
 
     Library.Notifications[FakeBackground] = Data
-    
+
     FakeBackground.Visible = true
     TweenService:Create(Background, Library.NotifyTweenInfo, {
         Position = UDim2.fromOffset(-2, -2),
@@ -3963,7 +3977,9 @@ function Library:Notify(...)
 
     task.delay(Library.NotifyTweenInfo.Time, function()
         if typeof(Data.Time) == "Instance" then
-            repeat task.wait() until DeletedTime == true
+            repeat
+                task.wait()
+            until DeletedTime == true
         else
             TweenService
                 :Create(TimerFill, TweenInfo.new(Data.Time, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut), {
@@ -4480,14 +4496,22 @@ function Library:CreateWindow(WindowInfo)
                 Tab:Resize()
             end
 
-            WarningBox.BackgroundColor3 = Info.IsNormal == true and Library.Scheme.BackgroundColor or Color3.fromRGB(127, 0, 0)
-            WarningBox.BorderColor3 = Info.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(255, 50, 50)
+            WarningBox.BackgroundColor3 = Info.IsNormal == true and Library.Scheme.BackgroundColor
+                or Color3.fromRGB(127, 0, 0)
+            WarningBox.BorderColor3 = Info.IsNormal == true and Library.Scheme.OutlineColor
+                or Color3.fromRGB(255, 50, 50)
             WarningTitle.TextColor3 = Info.IsNormal == true and Library.Scheme.FontColor or Color3.fromRGB(255, 50, 50)
             WarningStroke.Color = Info.IsNormal == true and Library.Scheme.OutlineColor or Color3.fromRGB(169, 0, 0)
 
-            if not Library.Registry[WarningBox] then Library:AddToRegistry(WarningBox, {}) end
-            if not Library.Registry[WarningTitle] then Library:AddToRegistry(WarningTitle, {}) end
-            if not Library.Registry[WarningStroke] then Library:AddToRegistry(WarningStroke, {}) end
+            if not Library.Registry[WarningBox] then
+                Library:AddToRegistry(WarningBox, {})
+            end
+            if not Library.Registry[WarningTitle] then
+                Library:AddToRegistry(WarningTitle, {})
+            end
+            if not Library.Registry[WarningStroke] then
+                Library:AddToRegistry(WarningStroke, {})
+            end
 
             Library.Registry[WarningBox].BackgroundColor3 = function()
                 return Info.IsNormal == true and Library.Scheme.BackgroundColor or Color3.fromRGB(127, 0, 0)
@@ -5276,12 +5300,19 @@ function Library:CreateWindow(WindowInfo)
         if
             (
                 typeof(Library.ToggleKeybind) == "table"
-                    and Library.ToggleKeybind.Type == "KeyPicker"
-                    and Input.KeyCode.Name == Library.ToggleKeybind.Value
+                and Library.ToggleKeybind.Type == "KeyPicker"
+                and Input.KeyCode.Name == Library.ToggleKeybind.Value
             ) or Input.KeyCode == Library.ToggleKeybind
         then
             Library.Toggle()
         end
+    end))
+
+    Library:GiveSignal(UserInputService.WindowFocused:Connect(function()
+        Library.IsRobloxFocused = true
+    end))
+    Library:GiveSignal(UserInputService.WindowFocusReleased:Connect(function()
+        Library.IsRobloxFocused = false
     end))
 
     return Window
